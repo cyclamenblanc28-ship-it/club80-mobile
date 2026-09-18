@@ -4,27 +4,38 @@
     "slug": "club80-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "package": "com.alexis2806.club80mobile"
+      "package": "com.alexis2806.club80mobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Le Club 80 a besoin d'accéder à vos photos pour publier des moments dans le cercle."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
-        "projectId": "90c8150a-6e24-410d-8b10-871d18a82ac9"
+        "projectId": "6d97093e-1123-4a0f-b7c6-649f011e3fe0"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6d97093e-1123-4a0f-b7c6-649f011e3fe0"
     }
   }
 }
