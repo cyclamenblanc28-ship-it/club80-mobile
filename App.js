@@ -157,6 +157,7 @@ export default function App() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [bioInput, setBioInput] = useState('');
   
   const [bio, setBio] = useState('Toujours partant pour de nouvelles aventures !');
   const [status, setStatus] = useState('🔥 En pleine forme');
@@ -166,9 +167,9 @@ export default function App() {
   const [activeFeedFilter, setActiveFeedFilter] = useState('all'); 
   const [refreshing, setRefreshing] = useState(false);
 
-  // Liste des membres en attente de validation (seuil de 80%)
+  // Liste des membres en attente de validation avec leur description (bio)
   const [pendingUsers, setPendingUsers] = useState([
-    { id: '1', username: 'NouveauMembre', votesFor: 3, votesAgainst: 0, totalVoters: 5 }
+    { id: '1', username: 'NouveauMembre', bio: 'Passionné de moto et de dev, prêt à rejoindre la bande !', votesFor: 3, votesAgainst: 0, totalVoters: 5 }
   ]);
 
   const [stories, setStories] = useState([]);
@@ -261,8 +262,10 @@ export default function App() {
     }
     setErrorMsg('');
     setLoading(true);
+    const userBio = bioInput.trim() || 'Toujours partant pour de nouvelles aventures !';
     try {
-      const userData = { username, status: 'pending', bio: 'Nouveau membre en attente !' };
+      const userData = { username, status: 'pending', bio: userBio };
+      setBio(userBio);
       await saveUserData(userData);
     } catch (err) {} finally {
       setLoading(false);
@@ -450,6 +453,9 @@ export default function App() {
           {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
           <TextInput style={styles.input} placeholder="Ton pseudo" placeholderTextColor="#8C8296" value={username} onChangeText={setUsername} autoCapitalize="none" />
           <TextInput style={styles.input} placeholder="Ton mot de passe" placeholderTextColor="#8C8296" secureTextEntry value={password} onChangeText={setPassword} />
+          {isRegistering && (
+            <TextInput style={styles.input} placeholder="Ta description / bio (pour les votes)..." placeholderTextColor="#8C8296" value={bioInput} onChangeText={setBioInput} />
+          )}
           <TouchableOpacity activeOpacity={0.8} style={styles.primaryButton} onPress={handleAuth} disabled={loading}>
             {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryButtonText}>{isRegistering ? "C'est parti !" : 'Connexion 🚀'}</Text>}
           </TouchableOpacity>
@@ -529,7 +535,7 @@ export default function App() {
                     setMusicUrl={setPostMusicUrl}
                   />
 
-                  {/* BLOC DE VOTE POUR LES NOUVEAUX MEMBRES */}
+                  {/* BLOC DE VOTE AVEC DESCRIPTION */}
                   <View style={[styles.createPostBox, { padding: 14 }]}>
                     <Text style={styles.sectionTitle}>🛡️ Validation des nouveaux Amigos</Text>
                     {pendingUsers.length === 0 ? (
@@ -538,9 +544,12 @@ export default function App() {
                       pendingUsers.map((member) => {
                         const approvalRate = member.totalVoters > 0 ? (member.votesFor / member.totalVoters) * 100 : 0;
                         return (
-                          <View key={member.id} style={{ marginTop: 10, padding: 12, backgroundColor: '#201A2C', borderRadius: 14 }}>
-                            <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>@{member.username}</Text>
-                            <Text style={{ color: '#00E5FF', fontSize: 12, marginTop: 4 }}>Approbation : {approvalRate.toFixed(0)}% (Objectif : 80%)</Text>
+                          <View key={member.id} style={{ marginTop: 10, padding: 14, backgroundColor: '#201A2C', borderRadius: 14 }}>
+                            <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>@{member.username}</Text>
+                            <Text style={{ color: '#D9D2E3', fontSize: 13, marginTop: 6, fontStyle: 'italic' }}>
+                              "{member.bio || 'Aucune description fournie.'}"
+                            </Text>
+                            <Text style={{ color: '#00E5FF', fontSize: 12, marginTop: 8 }}>Approbation : {approvalRate.toFixed(0)}% (Objectif : 80%)</Text>
                             
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
                               <TouchableOpacity 
@@ -624,7 +633,7 @@ export default function App() {
                   </View>
                 </View>
               );
-            }}
+          }}
           />
         )}
 
