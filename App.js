@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import { supabase } from './supabase';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -42,7 +43,7 @@ function CreatePostBox({ onPublish, postImageUri, setPostImageUri, pickImageForP
   const [text, setText] = useState('');
   const [showMusicInput, setShowMusicInput] = useState(false);
   const [tempMusic, setTempMusic] = useState('');
-  
+   
   const [showPollInput, setShowPollInput] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOpt1, setPollOpt1] = useState('');
@@ -79,7 +80,7 @@ function CreatePostBox({ onPublish, postImageUri, setPostImageUri, pickImageForP
         value={text} 
         onChangeText={setText} 
       />
-      
+       
       {postImageUri && (
         <View style={styles.previewContainer}>
           <Image source={{ uri: postImageUri }} style={styles.previewImage} />
@@ -158,19 +159,17 @@ export default function App() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [bioInput, setBioInput] = useState('');
-  
+   
   const [bio, setBio] = useState('Toujours partant pour de nouvelles aventures !');
   const [status, setStatus] = useState('🔥 En pleine forme');
   const [secretMode, setSecretMode] = useState(false);
-  
+   
   const [activeTab, setActiveTab] = useState('feed'); 
   const [activeFeedFilter, setActiveFeedFilter] = useState('all'); 
   const [refreshing, setRefreshing] = useState(false);
 
-  // Liste des membres en attente de validation avec leur description (bio)
-  const [pendingUsers, setPendingUsers] = useState([
-    { id: '1', username: 'NouveauMembre', bio: 'Passionné de moto et de dev, prêt à rejoindre la bande !', votesFor: 3, votesAgainst: 0, totalVoters: 5 }
-  ]);
+  // Liste des membres en attente récupérée depuis Supabase en temps réel
+  const [pendingUsers, setPendingUsers] = useState([]);
 
   const [stories, setStories] = useState([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState(null);
@@ -192,7 +191,7 @@ export default function App() {
   const [activeChatUser, setActiveChatUser] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [unreadMessages, setUnreadMessages] = useState(false);
-  
+   
   const [conversations, setConversations] = useState([]);
   const [privateMessages, setPrivateMessages] = useState({});
 
@@ -216,6 +215,44 @@ export default function App() {
   useEffect(() => {
     loadSavedData().finally(() => setIsReady(true));
   }, []);
+
+  // Synchronisation des membres en attente et écoute Realtime avec Supabase
+  useEffect(() => {
+    fetchPendingUsers();
+
+    const subscription = supabase
+      .channel('public:users')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+        fetchPendingUsers();
+        checkMyUserStatus();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [user]);
+
+  const fetchPendingUsers = async () => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('status', 'pending');
+    if (data) setPendingUsers(data);
+  };
+
+  const checkMyUserStatus = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', user.username)
+      .single();
+    if (data) {
+      setUser(data);
+      await AsyncStorage.setItem('@amigos_user', JSON.stringify(data));
+    }
+  };
 
   const loadSavedData = async () => {
     try {
@@ -263,13 +300,74 @@ export default function App() {
     setErrorMsg('');
     setLoading(true);
     const userBio = bioInput.trim() || 'Toujours partant pour de nouvelles aventures !';
+    
     try {
-      const userData = { username, status: 'pending', bio: userBio };
-      setBio(userBio);
-      await saveUserData(userData);
-    } catch (err) {} finally {
+      if (isRegistering) {
+        // Inscription : Insertion dans Supabase
+        const { data, error } = await supabase
+          .from('users')
+          .insert([{ username: username.toLowerCase().trim(), status: 'pending', bio: userBio, votes_for: 0, total_voters: 0 }])
+          .select()
+          .single();
+
+        if (error) {
+          setErrorMsg('Ce pseudo existe déjà ou une erreur est survenue.');
+        } else if (data) {
+          setBio(userBio);
+          await saveUserData(data);
+        }
+      } else {
+        // Connexion : Récupération depuis Supabase
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', username.toLowerCase().trim())
+          .single();
+
+        if (error || !data) {
+          setErrorMsg('Utilisateur introuvable. Inscris-toi !');
+        } else {
+          setBio(data.bio || '');
+          setStatus(data.status);
+          await saveUserData(data);
+        }
+      }
+    } catch (err) {
+      setErrorMsg('Erreur de connexion à la base de données.');
+    } finally {
       setLoading(false);
     }
+  };
+
+  const handleVote = async (memberId, currentVotesFor, currentTotalVoters) => {
+    const newVotesFor = currentVotesFor + 1;
+    const newTotalVoters = currentTotalVoters + 1;
+    const approvalRate = newTotalVoters > 0 ? (newVotesFor / newTotalVoters) * 100 : 0;
+    const newStatus = approvalRate >= 80 ? 'approved' : 'pending';
+
+    await supabase
+      .from('users')
+      .update({
+        votes_for: newVotesFor,
+        total_voters: newTotalVoters,
+        status: newStatus
+      })
+      .eq('id', memberId);
+
+    fetchPendingUsers();
+  };
+
+  const handleRefuseVote = async (memberId, currentTotalVoters) => {
+    const newTotalVoters = currentTotalVoters + 1;
+
+    await supabase
+      .from('users')
+      .update({
+        total_voters: newTotalVoters
+      })
+      .eq('id', memberId);
+
+    fetchPendingUsers();
   };
 
   const [loading, setLoading] = useState(false);
@@ -277,7 +375,7 @@ export default function App() {
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => { loadSavedData(); setRefreshing(false); }, 800);
+    setTimeout(() => { loadSavedData(); fetchPendingUsers(); setRefreshing(false); }, 800);
   }, []);
 
   const pickImageForPost = async () => {
@@ -404,7 +502,7 @@ export default function App() {
     const now = new Date();
     const timeStr = `${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
     const newMsg = { id: Date.now().toString(), sender: user.username, text: newMessage, time: timeStr };
-    
+     
     const currentChatHistory = privateMessages[activeChatUser] || [];
     const updatedMessages = { ...privateMessages, [activeChatUser]: [...currentChatHistory, newMsg] };
     setPrivateMessages(updatedMessages);
@@ -542,7 +640,7 @@ export default function App() {
                       <Text style={{ color: '#8C8296', fontSize: 13 }}>Aucun nouveau membre en attente de vote.</Text>
                     ) : (
                       pendingUsers.map((member) => {
-                        const approvalRate = member.totalVoters > 0 ? (member.votesFor / member.totalVoters) * 100 : 0;
+                        const approvalRate = member.total_voters > 0 ? (member.votes_for / member.total_voters) * 100 : 0;
                         return (
                           <View key={member.id} style={{ marginTop: 10, padding: 14, backgroundColor: '#201A2C', borderRadius: 14 }}>
                             <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>@{member.username}</Text>
@@ -554,30 +652,14 @@ export default function App() {
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
                               <TouchableOpacity 
                                 style={[styles.actionBtn, { backgroundColor: '#FF5722', flex: 1, marginRight: 6, alignItems: 'center' }]}
-                                onPress={() => {
-                                  const updated = pendingUsers.map(m => {
-                                    if (m.id === member.id) {
-                                      return { ...m, votesFor: m.votesFor + 1, totalVoters: m.totalVoters + 1 };
-                                    }
-                                    return m;
-                                  });
-                                  setPendingUsers(updated);
-                                }}
+                                onPress={() => handleVote(member.id, member.votes_for, member.total_voters)}
                               >
                                 <Text style={{ color: '#FFF', fontWeight: '800' }}>✅ Accepter</Text>
                               </TouchableOpacity>
 
                               <TouchableOpacity 
                                 style={[styles.actionBtn, { backgroundColor: '#2D253D', flex: 1, marginLeft: 6, alignItems: 'center' }]}
-                                onPress={() => {
-                                  const updated = pendingUsers.map(m => {
-                                    if (m.id === member.id) {
-                                      return { ...m, totalVoters: m.totalVoters + 1 };
-                                    }
-                                    return m;
-                                  });
-                                  setPendingUsers(updated);
-                                }}
+                                onPress={() => handleRefuseVote(member.id, member.total_voters)}
                               >
                                 <Text style={{ color: '#A295B3', fontWeight: '800' }}>❌ Refuser</Text>
                               </TouchableOpacity>
@@ -587,7 +669,7 @@ export default function App() {
                       })
                     )}
                   </View>
-                  
+                   
                   <View style={styles.filterRow}>
                     <TouchableOpacity onPress={() => setActiveFeedFilter('all')} style={[styles.filterChip, activeFeedFilter === 'all' && styles.filterChipActive]}>
                       <Text style={[styles.filterChipText, activeFeedFilter === 'all' && styles.filterChipTextActive]}>✨ Tous</Text>
@@ -633,7 +715,7 @@ export default function App() {
                   </View>
                 </View>
               );
-          }}
+            }}
           />
         )}
 
@@ -777,7 +859,7 @@ export default function App() {
                 <Text style={styles.profileName}>@{user.username}</Text>
                 <Text style={styles.profileBio}>{bio}</Text>
                 <View style={styles.statusPill}><Text style={styles.statusPillText}>{status}</Text></View>
-                
+                 
                 <TouchableOpacity 
                   activeOpacity={0.8} 
                   style={[styles.secretModeToggle, secretMode && styles.secretModeActive]} 
@@ -804,7 +886,7 @@ export default function App() {
       {currentStory && (
         <Modal visible={true} transparent={true} animationType="fade">
           <View style={styles.storyModalContainer} {...panResponder.panHandlers}>
-            
+             
             <View style={styles.storyHeaderInfo}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <View style={styles.storyModalAvatarMini}>
@@ -929,7 +1011,7 @@ const styles = StyleSheet.create({
   storyModalAuthor: { color: '#FFF', fontSize: 14, fontWeight: '800' },
   storyModalTime: { color: '#8C8296', fontSize: 11 },
   storyCloseBtn: { backgroundColor: 'rgba(255,255,255,0.2)', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  
+   
   storyImageWrapper: { flex: 1, position: 'relative', justifyContent: 'center', alignItems: 'center' },
   storyFullImage: { width: SCREEN_WIDTH, height: '100%' },
   bigHeartContainer: { position: 'absolute', justifyContent: 'center', alignItems: 'center' },
@@ -976,7 +1058,7 @@ const styles = StyleSheet.create({
   toolBtnText: { fontSize: 11, color: '#C4B8D4', fontWeight: '700' },
   postSubmitBtn: { backgroundColor: '#FF5722', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 16 },
   postSubmitText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
-  
+   
   postCard: { backgroundColor: '#15111E', borderRadius: 24, marginHorizontal: 16, marginBottom: 16, padding: 18, borderWidth: 1, borderColor: '#231D30' },
   postHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' },
   postAvatarMini: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#00E5FF', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
@@ -985,7 +1067,7 @@ const styles = StyleSheet.create({
   postTime: { color: '#8C8296', fontSize: 11 },
   postText: { fontSize: 14, color: '#F0ECF6', marginBottom: 12, lineHeight: 21 },
   postImage: { width: '100%', height: 260, borderRadius: 16, marginBottom: 12 },
-  
+   
   postInteractionsRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#231D30', paddingTop: 12 },
   actionBtn: { paddingVertical: 6, paddingHorizontal: 12, marginRight: 6, backgroundColor: '#201A2C', borderRadius: 12 },
   actionBtnText: { fontSize: 11, fontWeight: '700', color: '#A295B3' },
