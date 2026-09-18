@@ -152,7 +152,7 @@ function CreatePostBox({ onPublish, postImageUri, setPostImageUri, pickImageForP
 }
 
 export default function App() {
-  const [isReady, setIsReady] = useState(false); // <--- Sécurité anti-crash au démarrage APK
+  const [isReady, setIsReady] = useState(false);
   const [user, setUser] = useState(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [username, setUsername] = useState('');
@@ -166,10 +166,8 @@ export default function App() {
   const [activeFeedFilter, setActiveFeedFilter] = useState('all'); 
   const [refreshing, setRefreshing] = useState(false);
 
-  const [stories, setStories] = useState([
-    { id: '1', username: 'Hugo_B', media_url: 'https://picsum.photos/seed/hugo_story/400/800', time: 'Il y a 1h', likes: 6, likedByMe: false, comments: [] },
-    { id: '2', username: 'Clara_M', media_url: 'https://picsum.photos/seed/clara_story/400/800', time: 'Il y a 3h', likes: 3, likedByMe: false, comments: [] }
-  ]);
+  // Listes nettoyées des faux profils
+  const [stories, setStories] = useState([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState(null);
   const [storyCommentText, setStoryCommentText] = useState('');
   const [lastTap, setLastTap] = useState(null);
@@ -188,55 +186,27 @@ export default function App() {
 
   const [activeChatUser, setActiveChatUser] = useState(null);
   const [newMessage, setNewMessage] = useState('');
-  const [unreadMessages, setUnreadMessages] = useState(true);
+  const [unreadMessages, setUnreadMessages] = useState(false);
   
-  const [conversations, setConversations] = useState([
-    { id: '1', withUser: 'Hugo_B', status: '🎧 En studio', lastMessage: 'Salut les amis, on se fait un truc ce soir ?', time: '14:30' },
-    { id: '2', withUser: 'Clara_M', status: '🚀 En vadrouille', lastMessage: 'Regardez la story que j’ai postée !', time: 'Hier' }
-  ]);
+  const [conversations, setConversations] = useState([]);
+  const [privateMessages, setPrivateMessages] = useState({});
 
-  const [privateMessages, setPrivateMessages] = useState({
-    'Hugo_B': [{ id: '1', sender: 'Hugo_B', text: 'Salut les amis, on se fait un truc ce soir ?', time: '14:30' }],
-    'Clara_M': [{ id: '1', sender: 'Clara_M', text: 'Regardez la story que j’ai postée !', time: 'Hier' }]
-  });
-
-  const [posts, setPosts] = useState([
-    { 
-      id: '1', 
-      author: 'Hugo_B', 
-      text: 'Super ambiance ce weekend avec la bande ! Qui est chaud pour refaire une session ? 🎉', 
-      image: 'https://picsum.photos/seed/soiree/600/400', 
-      musicUrl: 'https://spotify.com',
-      poll: null,
-      likes: 18, 
-      likedByMe: false, 
-      time: 'Il y a 2h'
-    }
-  ]);
+  const [posts, setPosts] = useState([]);
   const [postImageUri, setPostImageUri] = useState(null);
   const [postMusicUrl, setPostMusicUrl] = useState(null);
   const [bookmarks, setBookmarks] = useState([]);
 
-  const [marketItems, setMarketItems] = useState([
-    { id: '1', title: 'Enceinte rétro bluetooth portable', price: '45€', author: 'Hugo_B', desc: 'Son incroyable, parfaite pour les pique-niques.' },
-    { id: '2', title: 'Recherche Barman / Aide événement', price: '150€', author: 'Clara_M', desc: 'Besoin d’un coup de main ce samedi !' }
-  ]);
+  const [marketItems, setMarketItems] = useState([]);
   const [marketTitle, setMarketTitle] = useState('');
   const [marketPrice, setMarketPrice] = useState('');
   const [marketDesc, setMarketDesc] = useState('');
 
-  const [services, setServices] = useState([
-    { id: '1', title: 'Covoiturage Toulouse ⇄ Albi', provider: 'Hugo_B', category: 'Trajet', desc: 'Départ vendredi à 18h, 2 places dispo.' },
-    { id: '2', title: 'Aide déménagement studio', provider: 'Clara_M', category: 'Coup de main', desc: 'Besoin de bras ce dimanche matin dans les Carmes !' }
-  ]);
+  const [services, setServices] = useState([]);
   const [serviceTitle, setServiceTitle] = useState('');
   const [serviceCategory, setServiceCategory] = useState('');
   const [serviceDesc, setServiceDesc] = useState('');
 
-  const membersLocations = [
-    { id: '1', name: 'Hugo_B', status: 'Quartier des Carmes, Toulouse', coord: '43.5950° N, 1.4450° E', active: true },
-    { id: '2', name: 'Clara_M', status: 'Capitole / Centre historique', coord: '43.6047° N, 1.4442° E', active: true }
-  ];
+  const membersLocations = [];
 
   useEffect(() => {
     loadSavedData().finally(() => setIsReady(true));
@@ -453,7 +423,6 @@ export default function App() {
 
   const bookmarkedPostsData = posts.filter(post => bookmarks.includes(post.id));
 
-  // Écran de chargement initial pour sécuriser le démarrage natif (APK)
   if (!isReady) {
     return (
       <SafeAreaView style={[styles.authContainer, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -607,6 +576,8 @@ export default function App() {
                   <Text style={styles.gpsRouteBtnText}>Ouvrir dans le GPS 🗺️</Text>
                 </TouchableOpacity>
               </View>
+            )} ListEmptyComponent={() => (
+              <Text style={{ textAlign: 'center', color: '#8C8296', marginTop: 20 }}>Aucun membre sur la carte pour l'instant.</Text>
             )} />
           </View>
         )}
@@ -686,6 +657,8 @@ export default function App() {
                         </View>
                       </View>
                     </TouchableOpacity>
+                  )} ListEmptyComponent={() => (
+                    <Text style={{ textAlign: 'center', color: '#8C8296', marginTop: 20 }}>Aucune conversation active pour le moment.</Text>
                   )}
                 />
               </View>
