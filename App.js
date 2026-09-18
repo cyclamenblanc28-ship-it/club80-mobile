@@ -166,7 +166,11 @@ export default function App() {
   const [activeFeedFilter, setActiveFeedFilter] = useState('all'); 
   const [refreshing, setRefreshing] = useState(false);
 
-  // Listes nettoyées des faux profils
+  // Liste des membres en attente de validation (seuil de 80%)
+  const [pendingUsers, setPendingUsers] = useState([
+    { id: '1', username: 'NouveauMembre', votesFor: 3, votesAgainst: 0, totalVoters: 5 }
+  ]);
+
   const [stories, setStories] = useState([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState(null);
   const [storyCommentText, setStoryCommentText] = useState('');
@@ -258,7 +262,7 @@ export default function App() {
     setErrorMsg('');
     setLoading(true);
     try {
-      const userData = { username, status: 'approved', bio: 'Toujours partant pour de nouvelles aventures !', status: '🔥 En pleine forme' };
+      const userData = { username, status: 'pending', bio: 'Nouveau membre en attente !' };
       await saveUserData(userData);
     } catch (err) {} finally {
       setLoading(false);
@@ -457,6 +461,22 @@ export default function App() {
     );
   }
 
+  if (user.status === 'pending') {
+    return (
+      <SafeAreaView style={[styles.authContainer, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+        <StatusBar barStyle="light-content" />
+        <AmigosLogo size={80} />
+        <Text style={[styles.logoTitle, { fontSize: 24, textAlign: 'center', marginTop: 20 }]}>EN ATTENTE D'ACCÈS</Text>
+        <Text style={[styles.subtitle, { textAlign: 'center', marginTop: 10 }]}>
+          Ton compte doit être accepté par 80% des utilisateurs de la communauté pour que tu puisses entrer. Patiente un instant ! ⏳
+        </Text>
+        <TouchableOpacity activeOpacity={0.8} style={[styles.primaryButton, { marginTop: 30, width: '100%' }]} onPress={handleLogout}>
+          <Text style={styles.primaryButtonText}>Se déconnecter</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   const currentStory = activeStoryIndex !== null ? stories[activeStoryIndex] : null;
 
   return (
@@ -508,6 +528,56 @@ export default function App() {
                     musicUrl={postMusicUrl}
                     setMusicUrl={setPostMusicUrl}
                   />
+
+                  {/* BLOC DE VOTE POUR LES NOUVEAUX MEMBRES */}
+                  <View style={[styles.createPostBox, { padding: 14 }]}>
+                    <Text style={styles.sectionTitle}>🛡️ Validation des nouveaux Amigos</Text>
+                    {pendingUsers.length === 0 ? (
+                      <Text style={{ color: '#8C8296', fontSize: 13 }}>Aucun nouveau membre en attente de vote.</Text>
+                    ) : (
+                      pendingUsers.map((member) => {
+                        const approvalRate = member.totalVoters > 0 ? (member.votesFor / member.totalVoters) * 100 : 0;
+                        return (
+                          <View key={member.id} style={{ marginTop: 10, padding: 12, backgroundColor: '#201A2C', borderRadius: 14 }}>
+                            <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>@{member.username}</Text>
+                            <Text style={{ color: '#00E5FF', fontSize: 12, marginTop: 4 }}>Approbation : {approvalRate.toFixed(0)}% (Objectif : 80%)</Text>
+                            
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+                              <TouchableOpacity 
+                                style={[styles.actionBtn, { backgroundColor: '#FF5722', flex: 1, marginRight: 6, alignItems: 'center' }]}
+                                onPress={() => {
+                                  const updated = pendingUsers.map(m => {
+                                    if (m.id === member.id) {
+                                      return { ...m, votesFor: m.votesFor + 1, totalVoters: m.totalVoters + 1 };
+                                    }
+                                    return m;
+                                  });
+                                  setPendingUsers(updated);
+                                }}
+                              >
+                                <Text style={{ color: '#FFF', fontWeight: '800' }}>✅ Accepter</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity 
+                                style={[styles.actionBtn, { backgroundColor: '#2D253D', flex: 1, marginLeft: 6, alignItems: 'center' }]}
+                                onPress={() => {
+                                  const updated = pendingUsers.map(m => {
+                                    if (m.id === member.id) {
+                                      return { ...m, totalVoters: m.totalVoters + 1 };
+                                    }
+                                    return m;
+                                  });
+                                  setPendingUsers(updated);
+                                }}
+                              >
+                                <Text style={{ color: '#A295B3', fontWeight: '800' }}>❌ Refuser</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
                   
                   <View style={styles.filterRow}>
                     <TouchableOpacity onPress={() => setActiveFeedFilter('all')} style={[styles.filterChip, activeFeedFilter === 'all' && styles.filterChipActive]}>
